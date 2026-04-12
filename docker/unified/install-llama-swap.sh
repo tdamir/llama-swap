@@ -39,7 +39,7 @@ if [ "$VERSION" = "latest" ]; then
 fi
 
 # Download and extract
-URL="https://github.com/${REPO}/releases/download/v${VERSION}/llama-swap_${VERSION}_linux_amd64.tar.gz"
+URL="https://github.com/${REPO}/releases/download/v${VERSION}/llama-swap_${VERSION}_linux_arm64.tar.gz"
 echo "=== Downloading llama-swap v${VERSION} ==="
 echo "URL: $URL"
 curl -fSL -o /tmp/llama-swap.tar.gz "$URL"

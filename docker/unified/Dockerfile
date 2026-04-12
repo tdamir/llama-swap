@@ -10,12 +10,16 @@
 # and installing binaries. Build stages are independent for cache efficiency.
 
 ARG BACKEND=cuda
+# ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=13.2.0
+# ARG CUDA_VERSION=13.0.1
+ARG UBUNTU_VERSION=24.04
 
 # ── Builder bases ──────────────────────────────────────────────────────
 
-FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS builder-base-cuda
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder-base-cuda
 
-ARG CMAKE_CUDA_ARCHITECTURES="60;61;75;86;89"
+ARG CMAKE_CUDA_ARCHITECTURES="121a-real"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}
 ENV CCACHE_DIR=/ccache
@@ -31,7 +35,7 @@ WORKDIR /build
 
 # ──
 
-FROM ubuntu:24.04 AS builder-base-vulkan
+FROM ubuntu:${UBUNTU_VERSION} AS builder-base-vulkan
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CCACHE_DIR=/ccache
@@ -89,18 +93,18 @@ RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
 # BuildKit only evaluates the selected branch, so vulkan builds never
 # pull nvidia/cuda:*-devel or compile ik_llama.cpp.
 
-FROM builder-base-vulkan AS ik-llama-vulkan
-RUN mkdir -p /install/bin
+# FROM builder-base-vulkan AS ik-llama-vulkan
+# RUN mkdir -p /install/bin
 
-FROM builder-base-cuda AS ik-llama-cuda
-ARG IK_LLAMA_COMMIT_HASH=main
-COPY install-ik-llama.sh /build/
-RUN --mount=type=cache,id=ccache-cuda,target=/ccache \
-    --mount=type=cache,id=ik-llama-cuda,target=/src/ik_llama.cpp/build \
-    bash /build/install-ik-llama.sh "${IK_LLAMA_COMMIT_HASH}"
+# FROM builder-base-cuda AS ik-llama-cuda
+# ARG IK_LLAMA_COMMIT_HASH=main
+# COPY install-ik-llama.sh /build/
+# RUN --mount=type=cache,id=ccache-cuda,target=/ccache \
+#     --mount=type=cache,id=ik-llama-cuda,target=/src/ik_llama.cpp/build \
+#     bash /build/install-ik-llama.sh "${IK_LLAMA_COMMIT_HASH}"
 
-ARG BACKEND=cuda
-FROM ik-llama-${BACKEND} AS ik-llama-build
+# ARG BACKEND=cuda
+# FROM ik-llama-${BACKEND} AS ik-llama-build
 
 # ── Download llama-swap release binary ────────────────────────────────
 
@@ -111,7 +115,7 @@ RUN bash /build/install-llama-swap.sh "${LS_VERSION}"
 
 # ── Runtime bases ─────────────────────────────────────────────────────
 
-FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS runtime-cuda
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime-cuda
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
@@ -127,7 +131,7 @@ COPY --from=builder-base-cuda /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/
 
 # ──
 
-FROM ubuntu:24.04 AS runtime-vulkan
+FROM ubuntu:${UBUNTU_VERSION} AS runtime-vulkan
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/bin:${PATH}"
@@ -178,7 +182,7 @@ COPY --from=llama-build /install/bin/llama-server /usr/local/bin/
 COPY --from=llama-build /install/bin/llama-cli /usr/local/bin/
 
 # Copy ik-llama-server (CUDA only; empty copy for vulkan)
-COPY --from=ik-llama-build /install/bin/ /usr/local/bin/
+# COPY --from=ik-llama-build /install/bin/ /usr/local/bin/
 
 # Install uv
 RUN pip install uv --break-system-packages
