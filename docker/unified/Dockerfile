@@ -28,8 +28,11 @@ ENV PATH="/usr/lib/ccache:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git python3 python3-pip libssl-dev \
-    curl ca-certificates ccache make wget \
+    curl ca-certificates ccache make wget nodejs npm \
     && rm -rf /var/lib/apt/lists/*
+
+# RUN bash wget -qO- https://get.pnpm.io/install.sh | sh -
+RUN npm install -g pnpm@latest-10
 
 WORKDIR /build
 
