@@ -226,9 +226,9 @@ echo "=========================================="
 echo ""
 
 EXPECTED_BINARIES=(llama-server llama-cli whisper-server whisper-cli sd-server sd-cli llama-swap)
-# if [[ "$BACKEND" == "cuda" ]]; then
-#     EXPECTED_BINARIES+=(ik-llama-server)
-# fi
+if [[ "$BACKEND" == "cuda" ]]; then
+    EXPECTED_BINARIES+=(ik-llama-server)
+fi
 
 MISSING_BINARIES=()
 for binary in "${EXPECTED_BINARIES[@]}"; do
