@@ -32,6 +32,13 @@ func (pm *ProxyManager) streamLogsHandler(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	logMonitorId := strings.TrimPrefix(c.Param("logMonitorID"), "/")
+
+	// Handle case where query string might be included in the parameter
+	// (can happen with catch-all routes on some versions/setups)
+	if idx := strings.Index(logMonitorId, "?"); idx != -1 {
+		logMonitorId = logMonitorId[:idx]
+	}
+
 	logger, err := pm.getLogger(logMonitorId)
 	if err != nil {
 		c.String(http.StatusBadRequest, err.Error())
@@ -97,6 +104,12 @@ func (pm *ProxyManager) getLogger(logMonitorId string) (*LogMonitor, error) {
 		if _, name, _, found := pm.findModelInPath("/" + logMonitorId); found {
 			for _, group := range pm.processGroups {
 				if process, found := group.GetMember(name); found {
+					return process.Logger(), nil
+				}
+			}
+			// also check the matrix when processGroups doesn't contain the model
+			if pm.matrix != nil {
+				if process, found := pm.matrix.GetProcess(name); found {
 					return process.Logger(), nil
 				}
 			}
