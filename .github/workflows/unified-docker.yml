@@ -88,7 +88,7 @@ jobs:
           # sudo docker system prune -af
           echo "After cleanup:"
           df -h
-          -
+      
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
