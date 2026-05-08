@@ -10,12 +10,16 @@
 # and installing binaries. Build stages are independent for cache efficiency.
 
 ARG BACKEND=cuda
+# ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=13.2.0
+# ARG CUDA_VERSION=13.0.1
+ARG UBUNTU_VERSION=24.04
 
 # ── Builder bases ──────────────────────────────────────────────────────
 
-FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS builder-base-cuda
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS builder-base-cuda
 
-ARG CMAKE_CUDA_ARCHITECTURES="60;61;75;86;89"
+ARG CMAKE_CUDA_ARCHITECTURES="121a-real"
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES}
 ENV CCACHE_DIR=/ccache
@@ -24,14 +28,17 @@ ENV PATH="/usr/lib/ccache:${PATH}"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential cmake git python3 python3-pip libssl-dev \
-    curl ca-certificates ccache make wget \
+    curl ca-certificates ccache make wget nodejs npm \
     && rm -rf /var/lib/apt/lists/*
+
+# RUN bash wget -qO- https://get.pnpm.io/install.sh | sh -
+RUN npm install -g pnpm@latest-10
 
 WORKDIR /build
 
 # ──
 
-FROM ubuntu:24.04 AS builder-base-vulkan
+FROM ubuntu:${UBUNTU_VERSION} AS builder-base-vulkan
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV CCACHE_DIR=/ccache
@@ -111,7 +118,7 @@ RUN bash /build/install-llama-swap.sh "${LS_VERSION}"
 
 # ── Runtime bases ─────────────────────────────────────────────────────
 
-FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04 AS runtime-cuda
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime-cuda
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
@@ -127,7 +134,7 @@ COPY --from=builder-base-cuda /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/
 
 # ──
 
-FROM ubuntu:24.04 AS runtime-vulkan
+FROM ubuntu:${UBUNTU_VERSION} AS runtime-vulkan
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/bin:${PATH}"
