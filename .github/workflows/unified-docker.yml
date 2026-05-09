@@ -1,8 +1,8 @@
 name: Build Unified Docker Image
 
-on:
-  schedule:
-    - cron: "37 5 * * *"
+#on:
+#  schedule:
+#    - cron: "37 5 * * *"
 
   workflow_dispatch:
     inputs:
@@ -35,7 +35,7 @@ on:
         description: "Build Vulkan image"
         type: boolean
         required: false
-        default: true
+        default: false
       push_to_ghcr:
         description: "Push images to ghcr.io"
         type: boolean
