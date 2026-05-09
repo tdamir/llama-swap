@@ -217,7 +217,7 @@ elif [[ "${GITHUB_ACTIONS:-}" == "true" && "${ACT:-}" != "true" ]]; then
     echo "Note: Using registry cache (${CACHE_REF})"
 fi
 
-DOCKER_BUILDKIT=1 docker buildx build --load "${BUILD_ARGS[@]}" "${SCRIPT_DIR}"
+DOCKER_BUILDKIT=1 docker buildx build --load --platform linux/arm64 "${BUILD_ARGS[@]}" "${SCRIPT_DIR}"
 
 echo ""
 echo "=========================================="
@@ -261,7 +261,7 @@ echo "=========================================="
 echo ""
 
 ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load -t "${ROOTLESS_TAG}" - <<EOF
+docker buildx build --load --platform linux/arm64 -t "${ROOTLESS_TAG}" - <<EOF
 FROM ${DOCKER_IMAGE_TAG}
 USER root
 RUN groupadd --system --gid 10001 llama-swap && \\
