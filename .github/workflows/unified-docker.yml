@@ -89,8 +89,8 @@ jobs:
           echo "After cleanup:"
           df -h
       
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      #- name: Set up QEMU
+      #  uses: docker/setup-qemu-action@v4
 
       # On GitHub Actions runners, create a fresh builder.
       # When running locally under act, skip this and reuse the existing
