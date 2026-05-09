@@ -1,8 +1,8 @@
 name: Build Unified Docker Image
 
-#on:
-#  schedule:
-#    - cron: "37 5 * * *"
+on:
+  schedule:
+    - cron: "0 0 1 1 *"
 
   workflow_dispatch:
     inputs:
