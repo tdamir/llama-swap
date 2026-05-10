@@ -133,7 +133,29 @@ jobs:
           docker tag "${BASE_TAG}" "${BASE_TAG}-${DATE_TAG}"
           docker push "${BASE_TAG}-${DATE_TAG}"
 
-     #     ROOTLESS_TAG="${BASE_TAG}-rootless"
-     #     docker push "${ROOTLESS_TAG}"
-     #     docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
-     #     docker push "${ROOTLESS_TAG}-${DATE_TAG}"
+      - name: Build unified Rootless Docker image (${{ matrix.backend }})
+        env:
+          LLAMA_REF: ${{ inputs.llama_cpp_ref || 'master' }}
+          WHISPER_REF: ${{ inputs.whisper_ref || 'master' }}
+          SD_REF: ${{ inputs.sd_ref || 'master' }}
+          IK_LLAMA_REF: ${{ inputs.ik_llama_ref || 'main' }}
+          LS_VERSION: ${{ inputs.llama_swap_version || 'main' }}
+          DOCKER_IMAGE_TAG: ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}
+          # When running under act, use the local builder that has warm ccache.
+          # On GitHub Actions, BUILDX_BUILDER is unset so docker uses the builder
+          # created by setup-buildx-action above.
+          BUILDX_BUILDER: ${{ env.ACT == 'true' && 'llama-swap-builder' || '' }}
+        run: |
+          chmod +x docker/unified/build-image-rootless.sh
+          docker/unified/build-image-rootless.sh --${{ matrix.backend }}
+
+      - name: Push Rootless to GitHub Container Registry
+        if: ${{ !env.ACT && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
+        run: |
+          BASE_TAG="ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}"
+          DATE_TAG=$(date -u +%Y-%m-%d)
+
+          ROOTLESS_TAG="${BASE_TAG}-rootless"
+          docker push "${ROOTLESS_TAG}"
+          docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
+          docker push "${ROOTLESS_TAG}-${DATE_TAG}"
