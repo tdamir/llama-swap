@@ -261,15 +261,15 @@ echo "=========================================="
 echo ""
 
 ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load --platform linux/arm64 -t "${ROOTLESS_TAG}" - <<EOF
-FROM ${DOCKER_IMAGE_TAG}
-USER root
-RUN groupadd --system --gid 10001 llama-swap && \\
-    useradd --system --uid 10001 --gid 10001 \\
-      --home /app --shell /sbin/nologin llama-swap && \\
-    chown -R 10001:10001 /etc/llama-swap /models
-USER 10001
-EOF
+#docker buildx build --load --platform linux/arm64 -t "${ROOTLESS_TAG}" - <<EOF
+#FROM ${DOCKER_IMAGE_TAG}
+#USER root
+#RUN groupadd --system --gid 10001 llama-swap && \\
+#    useradd --system --uid 10001 --gid 10001 \\
+#      --home /app --shell /sbin/nologin llama-swap && \\
+#    chown -R 10001:10001 /etc/llama-swap /models
+#USER 10001
+#EOF
 
 echo "Rootless image built: ${ROOTLESS_TAG}"
 
