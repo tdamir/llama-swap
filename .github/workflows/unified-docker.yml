@@ -133,7 +133,7 @@ jobs:
           docker tag "${BASE_TAG}" "${BASE_TAG}-${DATE_TAG}"
           docker push "${BASE_TAG}-${DATE_TAG}"
 
-          ROOTLESS_TAG="${BASE_TAG}-rootless"
-          docker push "${ROOTLESS_TAG}"
-          docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
-          docker push "${ROOTLESS_TAG}-${DATE_TAG}"
+     #     ROOTLESS_TAG="${BASE_TAG}-rootless"
+     #     docker push "${ROOTLESS_TAG}"
+     #     docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
+     #     docker push "${ROOTLESS_TAG}-${DATE_TAG}"
