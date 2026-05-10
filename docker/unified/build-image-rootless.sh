@@ -67,7 +67,7 @@ echo "=========================================="
 echo ""
 
 ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load --platform linux/arm64 -t "${ROOTLESS_TAG}" - <<EOF
+docker buildx build --load -t "${ROOTLESS_TAG}" - <<EOF
 FROM ${DOCKER_IMAGE_TAG}
 USER root
 RUN groupadd --system --gid 10001 llama-swap && \\

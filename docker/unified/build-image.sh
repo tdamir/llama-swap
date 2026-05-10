@@ -217,7 +217,7 @@ elif [[ "${GITHUB_ACTIONS:-}" == "true" && "${ACT:-}" != "true" ]]; then
     echo "Note: Using registry cache (${CACHE_REF})"
 fi
 
-DOCKER_BUILDKIT=1 docker buildx build --load --platform linux/arm64 "${BUILD_ARGS[@]}" "${SCRIPT_DIR}"
+DOCKER_BUILDKIT=1 docker buildx build --load "${BUILD_ARGS[@]}" "${SCRIPT_DIR}"
 
 echo ""
 echo "=========================================="
