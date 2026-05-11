@@ -58,7 +58,14 @@ if [[ -z "$BACKEND" ]]; then
     exit 1
 fi
 
-DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}}"
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *) echo "FATAL: Unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}-${ARCH}}"
 
 echo ""
 echo "=========================================="
@@ -91,11 +98,11 @@ echo "  llama-swap:           $(docker run --rm --entrypoint cat "${DOCKER_IMAGE
 echo ""
 if [[ "$BACKEND" == "vulkan" ]]; then
     echo "Run with:"
-    echo "  docker run -it --rm --device /dev/dri:/dev/dri ${DOCKER_IMAGE_TAG}"
+    echo "  docker run -it --rm --device /dev/dri:/dev/dri ${ROOTLESS_TAG}"
     echo ""
     echo "Note: For AMD GPUs, you may also need:"
-    echo "  docker run -it --rm --device /dev/dri:/dev/dri --group-add video ${DOCKER_IMAGE_TAG}"
+    echo "  docker run -it --rm --device /dev/dri:/dev/dri --group-add video ${ROOTLESS_TAG}"
 else
     echo "Run with:"
-    echo "  docker run -it --rm --gpus all ${DOCKER_IMAGE_TAG}"
+    echo "  docker run -it --rm --gpus all ${ROOTLESS_TAG}"
 fi

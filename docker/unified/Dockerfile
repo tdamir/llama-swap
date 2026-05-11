@@ -64,7 +64,7 @@ FROM builder-base AS whisper-build
 ARG BACKEND=cuda
 ARG WHISPER_COMMIT_HASH=master
 COPY install-whisper.sh /build/
-RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
+RUN --mount=type=cache,id=ccache-${BACKEND},target=${CCACHE_DIR} \
     --mount=type=cache,id=whisper-${BACKEND},target=/src/whisper.cpp/build \
     BACKEND=${BACKEND} bash /build/install-whisper.sh "${WHISPER_COMMIT_HASH}"
 
@@ -74,7 +74,7 @@ FROM builder-base AS sd-build
 ARG BACKEND=cuda
 ARG SD_COMMIT_HASH=master
 COPY install-sd.sh /build/
-RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
+RUN --mount=type=cache,id=ccache-${BACKEND},target=${CCACHE_DIR} \
     --mount=type=cache,id=sd-${BACKEND},target=/src/stable-diffusion.cpp/build \
     BACKEND=${BACKEND} bash /build/install-sd.sh "${SD_COMMIT_HASH}"
 
@@ -84,7 +84,7 @@ FROM builder-base AS llama-build
 ARG BACKEND=cuda
 ARG LLAMA_COMMIT_HASH=master
 COPY install-llama.sh /build/
-RUN --mount=type=cache,id=ccache-${BACKEND},target=/ccache \
+RUN --mount=type=cache,id=ccache-${BACKEND},target=${CCACHE_DIR} \
     --mount=type=cache,id=llama-${BACKEND},target=/src/llama.cpp/build \
     BACKEND=${BACKEND} bash /build/install-llama.sh "${LLAMA_COMMIT_HASH}"
 
@@ -102,7 +102,7 @@ RUN mkdir -p /install/bin
 FROM builder-base-cuda AS ik-llama-cuda
 ARG IK_LLAMA_COMMIT_HASH=main
 COPY install-ik-llama.sh /build/
-RUN --mount=type=cache,id=ccache-cuda,target=/ccache \
+RUN --mount=type=cache,id=ccache-cuda,target=${CCACHE_DIR} \
     --mount=type=cache,id=ik-llama-cuda,target=/src/ik_llama.cpp/build \
     bash /build/install-ik-llama.sh "${IK_LLAMA_COMMIT_HASH}"
 
