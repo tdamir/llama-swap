@@ -65,7 +65,7 @@ case "$ARCH" in
     *) echo "FATAL: Unsupported architecture: $ARCH" >&2; exit 1 ;;
 esac
 
-DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}}-${ARCH}"
+DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}-${ARCH}}"
 
 # Git repository URLs
 LLAMA_REPO="https://github.com/ggml-org/llama.cpp.git"
