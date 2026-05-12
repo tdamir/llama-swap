@@ -176,7 +176,7 @@ jobs:
     needs:
       - setup
       - build
-    if: ${{ !env.ACT && needs.setup.outputs.matrix != '[]' && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
+    if: ${{ needs.setup.outputs.matrix != '[]' && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
