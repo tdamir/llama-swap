@@ -172,4 +172,52 @@ jobs:
           docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
           docker push "${ROOTLESS_TAG}-${DATE_TAG}"
 
-  
+  merge-manifests:
+    needs:
+      - setup
+      - build
+    if: ${{ !env.ACT && needs.setup.outputs.matrix != '[]' && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: ${{ fromJSON(needs.setup.outputs.matrix) }}
+
+    steps:
+      - name: Set date tag
+        run: echo "DATE_TAG=$(date -u +%Y-%m-%d)" >> $GITHUB_ENV
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          BASE_TAG="ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}"
+          BASE_TAG_DATE="${BASE_TAG}-${DATE_TAG}"
+          AMD64_TAG="${BASE_TAG}-amd64"
+          ARM64_TAG="${BASE_TAG}-arm64"
+
+          ROOTLESS_TAG="${BASE_TAG}-rootless"
+          ROOTLESS_TAG_DATE="${ROOTLESS_TAG}-${DATE_TAG}"
+          ROOTLESS_AMD64_TAG="${AMD64_TAG}-rootless"
+          ROOTLESS_ARM64_TAG="${ARM64_TAG}-rootless"
+
+          docker buildx imagetools create -t "${BASE_TAG}" \
+            "${AMD64_TAG}" \
+            "${ARM64_TAG}"
+
+          docker buildx imagetools create -t "${BASE_TAG_DATE}" \
+            "${AMD64_TAG}" \
+            "${ARM64_TAG}"
+
+          docker buildx imagetools create -t "${ROOTLESS_TAG}" \
+            "${ROOTLESS_AMD64_TAG}" \
+            "${ROOTLESS_ARM64_TAG}"
+
+          docker buildx imagetools create -t "${ROOTLESS_TAG_DATE}" \
+            "${ROOTLESS_AMD64_TAG}" \
+            "${ROOTLESS_ARM64_TAG}"
