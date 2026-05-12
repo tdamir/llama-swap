@@ -126,7 +126,7 @@ jobs:
           SD_REF: ${{ inputs.sd_ref || 'master' }}
           IK_LLAMA_REF: ${{ inputs.ik_llama_ref || 'main' }}
           LS_VERSION: ${{ inputs.llama_swap_version || 'main' }}
-          DOCKER_IMAGE_TAG: ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}
+          DOCKER_IMAGE_TAG: ghcr.io/${{ github.repository }}:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}
           # When running under act, use the local builder that has warm ccache.
           # On GitHub Actions, BUILDX_BUILDER is unset so docker uses the builder
           # created by setup-buildx-action above.
@@ -138,7 +138,7 @@ jobs:
       - name: Push to GitHub Container Registry
         if: ${{ !env.ACT && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
         run: |
-          BASE_TAG="ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}"
+          BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}"
           DATE_TAG=$(date -u +%Y-%m-%d)
 
           docker push "${BASE_TAG}"
@@ -152,7 +152,7 @@ jobs:
           SD_REF: ${{ inputs.sd_ref || 'master' }}
           IK_LLAMA_REF: ${{ inputs.ik_llama_ref || 'main' }}
           LS_VERSION: ${{ inputs.llama_swap_version || 'main' }}
-          DOCKER_IMAGE_TAG: ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}
+          DOCKER_IMAGE_TAG: ghcr.io/${{ github.repository }}:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}
           # When running under act, use the local builder that has warm ccache.
           # On GitHub Actions, BUILDX_BUILDER is unset so docker uses the builder
           # created by setup-buildx-action above.
@@ -164,7 +164,7 @@ jobs:
       - name: Push Rootless to GitHub Container Registry
         if: ${{ !env.ACT && (github.event_name == 'schedule' || inputs.push_to_ghcr == true) }}
         run: |
-          BASE_TAG="ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}"
+          BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ matrix.backend }}-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' }}"
           DATE_TAG=$(date -u +%Y-%m-%d)
 
           ROOTLESS_TAG="${BASE_TAG}-rootless"
@@ -196,7 +196,7 @@ jobs:
 
       - name: Create and push multi-arch manifest
         run: |
-          BASE_TAG="ghcr.io/tdamir/llama-swap:unified-${{ matrix.backend }}"
+          BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ matrix.backend }}"
           BASE_TAG_DATE="${BASE_TAG}-${DATE_TAG}"
           AMD64_TAG="${BASE_TAG}-amd64"
           ARM64_TAG="${BASE_TAG}-arm64"
