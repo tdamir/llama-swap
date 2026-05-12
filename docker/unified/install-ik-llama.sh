@@ -26,11 +26,21 @@ CMAKE_FLAGS=(
     -DCMAKE_C_COMPILER_LAUNCHER=ccache
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
     -DGGML_CUDA=ON
-    -DGGML_ARCH_FLAGS="-march=armv9.2-a+dotprod+fp16"
     "-DCMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES:?CMAKE_CUDA_ARCHITECTURES must be set}"
     "-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler"
     "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath-link,/usr/local/cuda/lib64/stubs -lcuda -Wl,--allow-shlib-undefined"
 )
+
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) ARCH="amd64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *) echo "FATAL: Unsupported architecture: $ARCH" >&2; exit 1 ;;
+esac
+
+if [ "$ARCH" = "arm64" ]; then
+    CMAKE_FLAGS+=(-DGGML_ARCH_FLAGS="-march=armv9.2-a+dotprod+fp16")
+fi
 
 rm -rf build/CMakeCache.txt build/CMakeFiles 2>/dev/null || true
 
