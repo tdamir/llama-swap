@@ -66,6 +66,8 @@ case "$ARCH" in
 esac
 
 DOCKER_IMAGE_TAG="${DOCKER_IMAGE_TAG:-llama-swap:unified-${BACKEND}-${ARCH}}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-mostlygeek/llama-swap}"
+
 
 # Git repository URLs
 LLAMA_REPO="https://github.com/ggml-org/llama.cpp.git"
