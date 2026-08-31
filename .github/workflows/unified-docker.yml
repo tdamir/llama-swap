@@ -48,6 +48,11 @@ on:
         type: boolean
         required: false
         default: true
+      build_arm64:
+        description: "Also build the linux/arm64 images (amd64 is always built)"
+        type: boolean
+        required: false
+        default: true
       push_to_ghcr:
         description: "Push the unified images to ghcr.io (per-project artifacts images are always pushed; they are how the build stages reach the assemble job)"
         type: boolean
@@ -79,6 +84,8 @@ jobs:
     outputs:
       build_cuda: ${{ steps.plan.outputs.build_cuda }}
       build_vulkan: ${{ steps.plan.outputs.build_vulkan }}
+      build_arm64: ${{ steps.plan.outputs.build_arm64 }}
+      platforms: ${{ steps.plan.outputs.platforms }}
       cuda_projects: ${{ steps.plan.outputs.cuda_projects }}
       vulkan_projects: ${{ steps.plan.outputs.vulkan_projects }}
       push_to_ghcr: ${{ steps.plan.outputs.push_to_ghcr }}
@@ -115,17 +122,28 @@ jobs:
         run: |
           # schedule uses defaults (build both, push); workflow_dispatch respects inputs
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            build_cuda=true; build_vulkan=true; push=true
+            build_cuda=true; build_vulkan=true; build_arm64=true; push=true
           else
             build_cuda="${{ inputs.build_cuda }}"
             build_vulkan="${{ inputs.build_vulkan }}"
+            build_arm64="${{ inputs.build_arm64 }}"
             push="${{ inputs.push_to_ghcr }}"
+          fi
+
+          # amd64 is always built; arm64 adds the second entry the merge jobs
+          # iterate over when folding the per-platform images together.
+          if [[ "${build_arm64}" == "true" ]]; then
+            platforms='["linux/amd64","linux/arm64"]'
+          else
+            platforms='["linux/amd64"]'
           fi
 
           {
             echo "build_cuda=${build_cuda}"
             echo "build_vulkan=${build_vulkan}"
+            echo "build_arm64=${build_arm64}"
             echo "push_to_ghcr=${push}"
+            echo "platforms=${platforms}"
             # ik_llama.cpp has no Vulkan build.
             echo 'cuda_projects=["whisper","sd","audio","llama","ik-llama"]'
             echo 'vulkan_projects=["whisper","sd","audio","llama"]'
