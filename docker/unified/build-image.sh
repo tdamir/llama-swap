@@ -39,10 +39,7 @@ NO_CACHE=false
 MODE="unified"
 STAGE_TARGET=""
 WHISPER_FFMPEG="${WHISPER_FFMPEG:-yes}"
-
-# CUDA compute capabilities compiled as SASS. Only the CUDA base reads it as a
-# build arg; the projects inherit it through the base image's ENV.
-CMAKE_CUDA_ARCHITECTURES="${CMAKE_CUDA_ARCHITECTURES:-60;61;75;86;89}"
+PLATFORM="${PLATFORM:-}"
 
 # CUDA toolkit and runtime version, matching nvidia/cuda image tags. The CUDA
 # builder base and the runtime image are both built from it, so the compiled
@@ -66,6 +63,9 @@ for arg in "$@"; do
         --cuda)    BACKEND="cuda" ;;
         --vulkan)  BACKEND="vulkan" ;;
         --no-cache) NO_CACHE=true ;;
+        --platform=*)
+            PLATFORM="${arg#*=}"
+            ;;
         --resolve)  MODE="resolve" ;;
         --assemble) MODE="assemble" ;;
         --stage=*)
@@ -73,12 +73,14 @@ for arg in "$@"; do
             STAGE_TARGET="${arg#*=}"
             ;;
         --help|-h)
-            echo "Usage: ./build-image.sh --cuda|--vulkan [--no-cache]"
+            echo "Usage: ./build-image.sh --cuda|--vulkan [--no-cache] [--platform=linux/amd64|linux/arm64]"
             echo ""
             echo "Options:"
             echo "  --cuda      Build CUDA image (NVIDIA GPUs)"
             echo "  --vulkan    Build Vulkan image (AMD GPUs and compatible hardware)"
             echo "  --no-cache  Force rebuild without using Docker cache"
+            echo "  --platform=PLATFORM  Build for PLATFORM (linux/amd64 or linux/arm64);"
+            echo "                       defaults to the host architecture"
             echo "  --help, -h  Show this help message"
             echo ""
             echo "Split build (CI only):"
@@ -97,8 +99,9 @@ for arg in "$@"; do
             echo "  IK_LLAMA_REF         Pin ik_llama.cpp to a commit, tag, or branch (CUDA only)"
             echo "  LS_VERSION           Override llama-swap version (e.g., '170' or 'latest')"
             echo "  WHISPER_FFMPEG       Enable whisper.cpp FFmpeg support (default: yes)"
+            echo "  PLATFORM               Target platform (linux/amd64 or linux/arm64)"
             echo "  CMAKE_CUDA_ARCHITECTURES  CUDA compute capabilities to compile natively"
-            echo "                       (default: 60;61;75;86;89, CUDA only)"
+            echo "                       (default: amd64 60;61;75;86;89, arm64 80;86;89;121, CUDA only)"
             echo "  CUDA_VERSION         CUDA toolkit/runtime version as an nvidia/cuda image tag"
             echo "                       (default: 12.9.1, CUDA only)"
             echo "  ARTIFACT_REPO        Registry for base and artifacts images"
@@ -111,7 +114,7 @@ done
 if [[ -z "$BACKEND" ]]; then
     echo "Error: No backend specified. Please use --cuda or --vulkan."
     echo ""
-    echo "Usage: ./build-image.sh --cuda|--vulkan [--no-cache]"
+    echo "Usage: ./build-image.sh --cuda|--vulkan [--no-cache] [--platform=linux/amd64|linux/arm64]"
     exit 1
 fi
 
@@ -120,6 +123,36 @@ fi
 if [[ "$BACKEND" == "cuda" && ! "$CUDA_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
     echo "ERROR: CUDA_VERSION '${CUDA_VERSION}' is not a valid nvidia/cuda version (e.g., 12.9.1)" >&2
     exit 1
+fi
+
+# The platform the image is built for: explicit --platform/PLATFORM (CI builds
+# each platform natively on matching runners), or the host architecture for
+# local builds. It is baked into the base and artifacts tags below so both
+# platforms can coexist in the registry.
+if [[ -n "$PLATFORM" ]]; then
+    case "$PLATFORM" in
+        linux/amd64) ARCH="amd64" ;;
+        linux/arm64) ARCH="arm64" ;;
+        *) echo "ERROR: unsupported platform '${PLATFORM}' (use linux/amd64 or linux/arm64)" >&2; exit 1 ;;
+    esac
+else
+    case "$(uname -m)" in
+        x86_64) ARCH="amd64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+        *) echo "ERROR: unsupported host architecture '$(uname -m)'" >&2; exit 1 ;;
+    esac
+fi
+
+# CUDA compute capabilities compiled as SASS. Only the CUDA base reads it as a
+# build arg; the projects inherit it through the base image's ENV. The default
+# depends on the platform: the nvidia/cuda aarch64 toolchain does not support
+# Pascal (60/61), so the arm64 set skips them and adds 121 (GB10, DGX Spark).
+if [[ -z "${CMAKE_CUDA_ARCHITECTURES:-}" ]]; then
+    if [[ "$ARCH" == "arm64" ]]; then
+        CMAKE_CUDA_ARCHITECTURES="80;86;89;121"
+    else
+        CMAKE_CUDA_ARCHITECTURES="60;61;75;86;89"
+    fi
 fi
 
 # --resolve emits machine-readable output only, so the progress chatter that
@@ -230,12 +263,13 @@ base_tag() {
     # the tag even though the Dockerfile is unchanged.
     h="$( {
         sha256sum "${SCRIPT_DIR}/base-${BACKEND}.Dockerfile"
+        echo "${ARCH}"
         if [[ "${BACKEND}" == "cuda" ]]; then
             echo "${CMAKE_CUDA_ARCHITECTURES}"
             echo "${CUDA_VERSION}"
         fi
     } | sha256sum | cut -c1-12)"
-    echo "${ARTIFACT_REPO}:base-${BACKEND}-${h}"
+    echo "${ARTIFACT_REPO}:base-${BACKEND}-${ARCH}-${h}"
 }
 
 # A project's artifacts are determined by the upstream commit plus its recipe:
@@ -250,7 +284,7 @@ artifact_tag() {
         echo "base=$(base_tag)"
         echo "WHISPER_FFMPEG=${WHISPER_FFMPEG}"
     } | sha256sum | cut -c1-8 )"
-    echo "${ARTIFACT_REPO}:art-${project}-${BACKEND}-${commit:0:12}-${recipe}"
+    echo "${ARTIFACT_REPO}:art-${project}-${BACKEND}-${ARCH}-${commit:0:12}-${recipe}"
 }
 
 image_exists() {
@@ -361,6 +395,11 @@ if [[ "$NO_CACHE" == true ]]; then
     echo "Note: Building without cache"
 fi
 
+PLATFORM_ARGS=()
+if [[ -n "$PLATFORM" ]]; then
+    PLATFORM_ARGS+=(--platform="$PLATFORM")
+fi
+
 BASE_TAG="$(base_tag)"
 
 # ── Builders ──────────────────────────────────────────────────────────
@@ -381,6 +420,7 @@ build_base() {
         -f "${SCRIPT_DIR}/base-${BACKEND}.Dockerfile" \
         -t "${BASE_TAG}" \
         "${args[@]}" \
+        "${PLATFORM_ARGS[@]}" \
         "${CACHE_ARGS[@]}" \
         "${SCRIPT_DIR}"
 }
@@ -406,6 +446,7 @@ build_project() {
         --build-arg "AUDIO_COMMIT_HASH=${AUDIO_HASH}" \
         --build-arg "LLAMA_COMMIT_HASH=${LLAMA_HASH}" \
         --build-arg "IK_LLAMA_COMMIT_HASH=${IK_LLAMA_HASH}" \
+        "${PLATFORM_ARGS[@]}" \
         "${CACHE_ARGS[@]}" \
         "${SCRIPT_DIR}"
 }
@@ -438,7 +479,7 @@ build_runtime() {
     DOCKER_BUILDKIT=1 docker buildx build --load \
         -f "${SCRIPT_DIR}/runtime.Dockerfile" \
         -t "${DOCKER_IMAGE_TAG}" \
-        "${args[@]}" "${CACHE_ARGS[@]}" \
+        "${args[@]}" "${PLATFORM_ARGS[@]}" "${CACHE_ARGS[@]}" \
         "${SCRIPT_DIR}"
 }
 
@@ -580,7 +621,7 @@ echo "=========================================="
 echo ""
 
 ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load -t "${ROOTLESS_TAG}" - <<EOF
+docker buildx build --load "${PLATFORM_ARGS[@]}" -t "${ROOTLESS_TAG}" - <<EOF
 FROM ${DOCKER_IMAGE_TAG}
 USER root
 RUN groupadd --system --gid 10001 llama-swap && \\
@@ -602,6 +643,8 @@ echo "  ${DOCKER_IMAGE_TAG}"
 echo "  ${ROOTLESS_TAG}"
 echo ""
 echo "Built with:"
+echo "  platform:             ${PLATFORM:-native}"
+echo "  architecture:         ${ARCH}"
 echo "  llama.cpp:            ${LLAMA_HASH}"
 echo "  whisper.cpp:          ${WHISPER_HASH}"
 echo "  stable-diffusion.cpp: ${SD_HASH}"
