@@ -232,20 +232,33 @@ jobs:
             *) echo "ERROR: unsupported platform '${PLATFORM}'" >&2; exit 1 ;;
           esac
           # Per-platform tag; unified-docker.yml merges the platforms into the
-          # arch-less multi-arch manifest.
-          export DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
+          # arch-less multi-arch manifest. CUDA images include the version so
+          # multiple CUDA versions can coexist.
+          if [[ "${{ inputs.backend }}" == "cuda" ]]; then
+            export DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository }}:unified-cuda-${CUDA_VERSION}-${ARCH}"
+          else
+            export DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
+          fi
           export ARTIFACT_REPO="ghcr.io/${{ github.repository }}-build"
           chmod +x docker/unified/build-image.sh
           docker/unified/build-image.sh --${{ inputs.backend }} --assemble
 
       - name: Push to GitHub Container Registry
         if: ${{ !env.ACT && inputs.push_to_ghcr }}
+        env:
+          CUDA_VERSION: ${{ inputs.cuda_version || '12.9.1' }}
         run: |
           case "${{ inputs.platform }}" in
             linux/arm64) ARCH="arm64" ;;
             *) ARCH="amd64" ;;
           esac
-          BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
+          # CUDA images include the version in the tag so multiple CUDA
+          # versions can coexist in the registry.
+          if [[ "${{ inputs.backend }}" == "cuda" ]]; then
+            BASE_TAG="ghcr.io/${{ github.repository }}:unified-cuda-${CUDA_VERSION}-${ARCH}"
+          else
+            BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
+          fi
           DATE_TAG=$(date -u +%Y-%m-%d)
 
           docker push "${BASE_TAG}"
