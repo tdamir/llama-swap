@@ -208,6 +208,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # Tag shared by the assemble, push and rootless steps. Per-platform tag;
+      # unified-docker.yml merges the platforms into the arch-less multi-arch
+      # manifest. CUDA images include the version so multiple CUDA versions can
+      # coexist.
+      - name: Set image tags
+        env:
+          CUDA_VERSION: ${{ inputs.cuda_version || '12.9.1' }}
+        run: |
+          case "${{ inputs.platform }}" in
+            linux/arm64) ARCH="arm64" ;;
+            linux/amd64) ARCH="amd64" ;;
+            *) echo "ERROR: unsupported platform '${{ inputs.platform }}'" >&2; exit 1 ;;
+          esac
+          if [[ "${{ inputs.backend }}" == "cuda" ]]; then
+            echo "IMAGE_TAG=ghcr.io/${{ github.repository }}:unified-cuda-${CUDA_VERSION}-${ARCH}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}" >> "$GITHUB_ENV"
+          fi
+          # Shared by the runtime and rootless pushes so their date tags match.
+          echo "DATE_TAG=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+
       # Copies each project's published /install into the runtime image. The
       # compile stages are not part of this build's graph, so this is minutes.
       - name: Assemble unified Docker image
@@ -221,51 +242,43 @@ jobs:
           IK_LLAMA_REF: ${{ inputs.ik_llama_hash }}
           LS_VERSION: ${{ inputs.ls_hash }}
           PLATFORM: ${{ inputs.platform }}
+          DOCKER_IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          ARTIFACT_REPO: ghcr.io/${{ github.repository }}-build
           # When running under act, use the local builder that has warm ccache.
           # On GitHub Actions, BUILDX_BUILDER is unset so docker uses the builder
           # created by setup-buildx-action above.
           BUILDX_BUILDER: ${{ env.ACT == 'true' && 'llama-swap-builder' || '' }}
         run: |
-          case "${PLATFORM}" in
-            linux/arm64) ARCH="arm64" ;;
-            linux/amd64) ARCH="amd64" ;;
-            *) echo "ERROR: unsupported platform '${PLATFORM}'" >&2; exit 1 ;;
-          esac
-          # Per-platform tag; unified-docker.yml merges the platforms into the
-          # arch-less multi-arch manifest. CUDA images include the version so
-          # multiple CUDA versions can coexist.
-          if [[ "${{ inputs.backend }}" == "cuda" ]]; then
-            export DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository }}:unified-cuda-${CUDA_VERSION}-${ARCH}"
-          else
-            export DOCKER_IMAGE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
-          fi
-          export ARTIFACT_REPO="ghcr.io/${{ github.repository }}-build"
           chmod +x docker/unified/build-image.sh
           docker/unified/build-image.sh --${{ inputs.backend }} --assemble
 
       - name: Push to GitHub Container Registry
         if: ${{ !env.ACT && inputs.push_to_ghcr }}
+        run: |
+          docker push "${IMAGE_TAG}"
+          docker tag "${IMAGE_TAG}" "${IMAGE_TAG}-${DATE_TAG}"
+          docker push "${IMAGE_TAG}-${DATE_TAG}"
+
+      # The rootless image is the runtime image plus a non-root user, so it is
+      # built after that image is pushed rather than at the end of --assemble:
+      # as part of --assemble its FROM pointed at a tag no step had published
+      # yet, and the buildx container driver -- which cannot see the locally
+      # loaded image -- failed to resolve it.
+      - name: Build and push rootless image
+        if: ${{ !env.ACT && inputs.push_to_ghcr }}
         env:
           CUDA_VERSION: ${{ inputs.cuda_version || '12.9.1' }}
+          CMAKE_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures }}
+          LLAMA_REF: ${{ inputs.llama_hash }}
+          WHISPER_REF: ${{ inputs.whisper_hash }}
+          SD_REF: ${{ inputs.sd_hash }}
+          AUDIO_REF: ${{ inputs.audio_hash }}
+          IK_LLAMA_REF: ${{ inputs.ik_llama_hash }}
+          LS_VERSION: ${{ inputs.ls_hash }}
+          PLATFORM: ${{ inputs.platform }}
+          DOCKER_IMAGE_TAG: ${{ env.IMAGE_TAG }}
+          DATE_TAG: ${{ env.DATE_TAG }}
+          ARTIFACT_REPO: ghcr.io/${{ github.repository }}-build
         run: |
-          case "${{ inputs.platform }}" in
-            linux/arm64) ARCH="arm64" ;;
-            *) ARCH="amd64" ;;
-          esac
-          # CUDA images include the version in the tag so multiple CUDA
-          # versions can coexist in the registry.
-          if [[ "${{ inputs.backend }}" == "cuda" ]]; then
-            BASE_TAG="ghcr.io/${{ github.repository }}:unified-cuda-${CUDA_VERSION}-${ARCH}"
-          else
-            BASE_TAG="ghcr.io/${{ github.repository }}:unified-${{ inputs.backend }}-${ARCH}"
-          fi
-          DATE_TAG=$(date -u +%Y-%m-%d)
-
-          docker push "${BASE_TAG}"
-          docker tag "${BASE_TAG}" "${BASE_TAG}-${DATE_TAG}"
-          docker push "${BASE_TAG}-${DATE_TAG}"
-
-          ROOTLESS_TAG="${BASE_TAG}-rootless"
-          docker push "${ROOTLESS_TAG}"
-          docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
-          docker push "${ROOTLESS_TAG}-${DATE_TAG}"
+          chmod +x docker/unified/build-image.sh
+          docker/unified/build-image.sh --${{ inputs.backend }} --rootless

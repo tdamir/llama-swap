@@ -30,6 +30,11 @@
 #   ./build-image.sh --cuda --stage=base      # build + push the builder base
 #   ./build-image.sh --cuda --stage=whisper   # build + push one project's artifacts
 #   ./build-image.sh --cuda --assemble        # assemble the unified image
+#   ./build-image.sh --cuda --rootless        # build + push the rootless variant
+#
+# The rootless image is the published runtime image plus a non-root user, so
+# --rootless is its own CI step that runs after the runtime image has been
+# pushed: its FROM has to resolve a tag that only exists once that push did.
 #
 
 set -euo pipefail
@@ -68,6 +73,7 @@ for arg in "$@"; do
             ;;
         --resolve)  MODE="resolve" ;;
         --assemble) MODE="assemble" ;;
+        --rootless) MODE="rootless" ;;
         --stage=*)
             MODE="stage"
             STAGE_TARGET="${arg#*=}"
@@ -89,6 +95,8 @@ for arg in "$@"; do
             echo "  --stage=PROJECT  Build and push one project's artifacts image"
             echo "                   (${ALL_PROJECTS[*]})"
             echo "  --assemble       Assemble the unified image from published artifacts"
+            echo "  --rootless       Build and push the rootless variant of DOCKER_IMAGE_TAG"
+            echo "                   (DOCKER_IMAGE_TAG must be loaded locally or published)"
             echo ""
             echo "Environment variables:"
             echo "  DOCKER_IMAGE_TAG     Set custom image tag (default: llama-swap:unified-cuda or llama-swap:unified-vulkan)"
@@ -295,6 +303,7 @@ log "=========================================="
 case "$MODE" in
     stage)    log "llama-swap Build (${STAGE_TARGET}, ${BACKEND})" ;;
     assemble) log "llama-swap Unified Assemble (${BACKEND})" ;;
+    rootless) log "llama-swap Rootless Variant (${BACKEND})" ;;
     *)        log "llama-swap Unified Build (${BACKEND})" ;;
 esac
 log "=========================================="
@@ -401,6 +410,7 @@ if [[ -n "$PLATFORM" ]]; then
 fi
 
 BASE_TAG="$(base_tag)"
+ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
 
 # ── Builders ──────────────────────────────────────────────────────────
 
@@ -483,6 +493,47 @@ build_runtime() {
         "${SCRIPT_DIR}"
 }
 
+# The rootless variant is the finished runtime image with a non-root user
+# layered on top of it.
+#
+# It builds with the docker (daemon) builder rather than the CI builder
+# deliberately: rootless.Dockerfile's FROM points at ${DOCKER_IMAGE_TAG}, which
+# only exists in the daemon's image store (a local --load) or in the registry
+# (after a push). A docker-container builder can resolve neither a locally
+# loaded tag nor one that has not been pushed yet, which is what broke CI.
+build_rootless() {
+    local output=("$@")
+    local tags=(-t "${ROOTLESS_TAG}")
+    if [[ -n "${ROOTLESS_DATE_TAG:-}" ]]; then
+        tags+=(-t "${ROOTLESS_DATE_TAG}")
+    fi
+
+    # Use the registry copy when there is no local one; the daemon pull and the
+    # registry credentials are already set up in CI.
+    if ! docker image inspect "${DOCKER_IMAGE_TAG}" >/dev/null 2>&1; then
+        if ! image_exists "${DOCKER_IMAGE_TAG}"; then
+            echo "ERROR: base image ${DOCKER_IMAGE_TAG} is neither loaded locally nor published." >&2
+            echo "  The rootless image is built on top of the runtime image, so that" >&2
+            echo "  image has to be built (--assemble) or pushed first." >&2
+            exit 1
+        fi
+        echo "${DOCKER_IMAGE_TAG} not loaded locally, pulling it from the registry..."
+    fi
+
+    echo ""
+    echo "=========================================="
+    echo "Building rootless image (${BACKEND})..."
+    echo "=========================================="
+    echo ""
+    DOCKER_BUILDKIT=1 docker buildx build --builder default "${output[@]}" \
+        -f "${SCRIPT_DIR}/rootless.Dockerfile" \
+        "${tags[@]}" \
+        --build-arg "BASE_IMAGE=${DOCKER_IMAGE_TAG}" \
+        "${PLATFORM_ARGS[@]}" \
+        "${CACHE_ARGS[@]}" \
+        "${SCRIPT_DIR}"
+}
+
 # ── --stage: build and publish one image ──────────────────────────────
 
 if [[ "$MODE" == "stage" ]]; then
@@ -514,6 +565,29 @@ if [[ "$MODE" == "stage" ]]; then
 
     echo ""
     echo "Published: ${TARGET_TAG}"
+    exit 0
+fi
+
+# ── --rootless: publish the rootless variant of the runtime image ──────
+#
+# Its own CI step so it never depends on an image tag that a later step is
+# still responsible for publishing: the assemble job pushes the runtime image
+# first, then this runs.
+
+if [[ "$MODE" == "rootless" ]]; then
+    # Same date tag as the runtime image gets, so the pair always matches.
+    if [[ -n "${DATE_TAG:-}" ]]; then
+        ROOTLESS_DATE_TAG="${ROOTLESS_TAG}-${DATE_TAG}"
+    fi
+
+    echo ""
+    echo "Base image:  ${DOCKER_IMAGE_TAG}"
+    echo "Rootless:    ${ROOTLESS_TAG}"
+
+    build_rootless --push
+
+    echo ""
+    echo "Published: ${ROOTLESS_TAG}${ROOTLESS_DATE_TAG:+ ${ROOTLESS_DATE_TAG}}"
     exit 0
 fi
 
@@ -614,24 +688,13 @@ fi
 
 echo "audio.cpp verified: deployment build (compiled model spec catalog), binary runs"
 
-echo ""
-echo "=========================================="
-echo "Building rootless image..."
-echo "=========================================="
-echo ""
-
-ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load "${PLATFORM_ARGS[@]}" -t "${ROOTLESS_TAG}" - <<EOF
-FROM ${DOCKER_IMAGE_TAG}
-USER root
-RUN groupadd --system --gid 10001 llama-swap && \\
-    useradd --system --uid 10001 --gid 10001 \\
-      --home /app --shell /sbin/nologin llama-swap && \\
-    chown -R 10001:10001 /etc/llama-swap /models
-USER 10001
-EOF
-
-echo "Rootless image built: ${ROOTLESS_TAG}"
+# Only the local unified build derives the rootless image here. CI builds it
+# with --rootless as a separate step, after the runtime image is pushed.
+ROOTLESS_BUILT=false
+if [[ "$MODE" == "unified" ]]; then
+    build_rootless --load
+    ROOTLESS_BUILT=true
+fi
 
 echo ""
 echo "=========================================="
@@ -640,7 +703,9 @@ echo "=========================================="
 echo ""
 echo "Image tags:"
 echo "  ${DOCKER_IMAGE_TAG}"
-echo "  ${ROOTLESS_TAG}"
+if [[ "$ROOTLESS_BUILT" == true ]]; then
+    echo "  ${ROOTLESS_TAG}"
+fi
 echo ""
 echo "Built with:"
 echo "  platform:             ${PLATFORM:-native}"
