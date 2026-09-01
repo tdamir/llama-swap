@@ -237,14 +237,14 @@ jobs:
           rootless_tags=()
           for platform in $(echo "${PLATFORMS}" | jq -r '.[]'); do
             arch="${platform#linux/}"
-            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-rootless-${arch}"; do
+            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-${arch}-rootless"; do
               if ! docker buildx imagetools inspect "${tag}" >/dev/null 2>&1; then
                 echo "ERROR: ${tag} was not published; the ${platform} build must have failed." >&2
                 exit 1
               fi
             done
             base_tags+=("${BASE_TAG}-${arch}")
-            rootless_tags+=("${BASE_TAG}-rootless-${arch}")
+            rootless_tags+=("${BASE_TAG}-${arch}-rootless")
           done
           docker buildx imagetools create -t "${BASE_TAG}" "${base_tags[@]}"
           docker buildx imagetools create -t "${BASE_TAG}-${DATE_TAG}" "${base_tags[@]}"
@@ -322,14 +322,14 @@ jobs:
           rootless_tags=()
           for platform in $(echo "${PLATFORMS}" | jq -r '.[]'); do
             arch="${platform#linux/}"
-            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-rootless-${arch}"; do
+            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-${arch}-rootless"; do
               if ! docker buildx imagetools inspect "${tag}" >/dev/null 2>&1; then
                 echo "ERROR: ${tag} was not published; the ${platform} build must have failed." >&2
                 exit 1
               fi
             done
             base_tags+=("${BASE_TAG}-${arch}")
-            rootless_tags+=("${BASE_TAG}-rootless-${arch}")
+            rootless_tags+=("${BASE_TAG}-${arch}-rootless")
           done
           docker buildx imagetools create -t "${BASE_TAG}" "${base_tags[@]}"
           docker buildx imagetools create -t "${BASE_TAG}-${DATE_TAG}" "${base_tags[@]}"
@@ -405,14 +405,14 @@ jobs:
           rootless_tags=()
           for platform in $(echo "${PLATFORMS}" | jq -r '.[]'); do
             arch="${platform#linux/}"
-            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-rootless-${arch}"; do
+            for tag in "${BASE_TAG}-${arch}" "${BASE_TAG}-${arch}-rootless"; do
               if ! docker buildx imagetools inspect "${tag}" >/dev/null 2>&1; then
                 echo "ERROR: ${tag} was not published; the ${platform} build must have failed." >&2
                 exit 1
               fi
             done
             base_tags+=("${BASE_TAG}-${arch}")
-            rootless_tags+=("${BASE_TAG}-rootless-${arch}")
+            rootless_tags+=("${BASE_TAG}-${arch}-rootless")
           done
           docker buildx imagetools create -t "${BASE_TAG}" "${base_tags[@]}"
           docker buildx imagetools create -t "${BASE_TAG}-${DATE_TAG}" "${base_tags[@]}"
