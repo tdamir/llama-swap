@@ -31,7 +31,7 @@ on:
         required: false
         default: ""
       cuda_architectures:
-        description: "CUDA compute capabilities to compile natively, e.g. 80;86;89 (CUDA only, default: 60;61;75;86;89)"
+        description: "Override CUDA compute capabilities for all versions (default: 60;61;75;86;89 for CUDA 12, 86;89;120;121 for CUDA 13)"
         required: false
         default: ""
       llama_swap_version:
@@ -96,7 +96,8 @@ jobs:
       ik_llama_hash: ${{ steps.refs.outputs.ik_llama_hash }}
       ls_hash: ${{ steps.refs.outputs.ls_hash }}
       cuda_versions: ${{ steps.plan.outputs.cuda_versions }}
-      cuda_architectures: ${{ steps.plan.outputs.cuda_architectures }}
+      cuda_arch_12: ${{ steps.plan.outputs.cuda_arch_12 }}
+      cuda_arch_13: ${{ steps.plan.outputs.cuda_arch_13 }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # 6.0.2
@@ -152,7 +153,11 @@ jobs:
             echo 'cuda_projects=["whisper","sd","audio","llama","ik-llama"]'
             echo 'vulkan_projects=["whisper","sd","audio","llama"]'
             echo "cuda_versions=${cuda_versions}"
-            echo "cuda_architectures=${{ inputs.cuda_architectures || '60;61;75;86;89' }}"
+            # Per-version defaults: CUDA 12 supports Pascal through Ada;
+            # CUDA 13 drops Pascal/Volta/Turing and adds Blackwell (120/121).
+            # An explicit cuda_architectures input overrides both.
+            echo "cuda_arch_12=${{ inputs.cuda_architectures || '60;61;75;86;89' }}"
+            echo "cuda_arch_13=${{ inputs.cuda_architectures || '86;89;120;121' }}"
           } >> "$GITHUB_OUTPUT"
 
 # One backend call per version per platform so each chain (base -> projects ->
@@ -180,7 +185,7 @@ jobs:
       ik_llama_hash: ${{ needs.setup.outputs.ik_llama_hash }}
       ls_hash: ${{ needs.setup.outputs.ls_hash }}
       cuda_version: "12.9.1"
-      cuda_architectures: ${{ needs.setup.outputs.cuda_architectures }}
+      cuda_architectures: ${{ needs.setup.outputs.cuda_arch_12 }}
 
   cuda-1291-arm64:
     needs: setup
@@ -201,7 +206,7 @@ jobs:
       ik_llama_hash: ${{ needs.setup.outputs.ik_llama_hash }}
       ls_hash: ${{ needs.setup.outputs.ls_hash }}
       cuda_version: "12.9.1"
-      cuda_architectures: ${{ needs.setup.outputs.cuda_architectures }}
+      cuda_architectures: ${{ needs.setup.outputs.cuda_arch_12 }}
 
   cuda-1291-merge:
     needs:
@@ -267,7 +272,7 @@ jobs:
       ik_llama_hash: ${{ needs.setup.outputs.ik_llama_hash }}
       ls_hash: ${{ needs.setup.outputs.ls_hash }}
       cuda_version: "13.3.0"
-      cuda_architectures: ${{ needs.setup.outputs.cuda_architectures }}
+      cuda_architectures: ${{ needs.setup.outputs.cuda_arch_13 }}
 
   cuda-1330-arm64:
     needs: setup
@@ -288,7 +293,7 @@ jobs:
       ik_llama_hash: ${{ needs.setup.outputs.ik_llama_hash }}
       ls_hash: ${{ needs.setup.outputs.ls_hash }}
       cuda_version: "13.3.0"
-      cuda_architectures: ${{ needs.setup.outputs.cuda_architectures }}
+      cuda_architectures: ${{ needs.setup.outputs.cuda_arch_13 }}
 
   cuda-1330-merge:
     needs:
@@ -351,8 +356,8 @@ jobs:
       audio_hash: ${{ needs.setup.outputs.audio_hash }}
       ik_llama_hash: ${{ needs.setup.outputs.ik_llama_hash }}
       ls_hash: ${{ needs.setup.outputs.ls_hash }}
-      cuda_version: ${{ needs.setup.outputs.cuda_versions }}
-      cuda_architectures: ${{ needs.setup.outputs.cuda_architectures }}
+      cuda_version: ""
+      cuda_architectures: ""
 
   vulkan-arm64:
     needs: setup
