@@ -30,6 +30,8 @@
 #   ./build-image.sh --cuda --stage=base      # build + push the builder base
 #   ./build-image.sh --cuda --stage=whisper   # build + push one project's artifacts
 #   ./build-image.sh --cuda --assemble        # assemble the unified image
+#   ./build-image.sh --cuda --stage=rootless  # build + push rootless from the
+#                                             # published unified image (CI)
 #
 
 set -euo pipefail
@@ -86,6 +88,8 @@ for arg in "$@"; do
             echo "  --stage=base     Build and push the builder base image"
             echo "  --stage=PROJECT  Build and push one project's artifacts image"
             echo "                   (${ALL_PROJECTS[*]})"
+            echo "  --stage=rootless Build and push the rootless image from the"
+            echo "                   published DOCKER_IMAGE_TAG (CI)"
             echo "  --assemble       Assemble the unified image from published artifacts"
             echo ""
             echo "Environment variables:"
@@ -266,10 +270,10 @@ esac
 log "=========================================="
 log ""
 
-if [[ "$MODE" == "stage" && "$STAGE_TARGET" != "base" ]]; then
+if [[ "$MODE" == "stage" && "$STAGE_TARGET" != "base" && "$STAGE_TARGET" != "rootless" ]]; then
     if ! printf '%s\n' "${ALL_PROJECTS[@]}" | grep -qx -- "${STAGE_TARGET}"; then
         echo "ERROR: unknown stage target '${STAGE_TARGET}'" >&2
-        echo "  Known targets: base ${ALL_PROJECTS[*]}" >&2
+        echo "  Known targets: base rootless ${ALL_PROJECTS[*]}" >&2
         exit 1
     fi
     if ! backend_projects | grep -qx -- "${STAGE_TARGET}"; then
@@ -410,6 +414,31 @@ build_project() {
         "${SCRIPT_DIR}"
 }
 
+# Derives from DOCKER_IMAGE_TAG, which is exactly why CI must publish the
+# unified image before calling this (see --stage=rootless): a rootless image
+# is always built from whatever the unified tag currently points at.
+build_rootless() {
+    local output=("$@")
+    local rootless_tag="${DOCKER_IMAGE_TAG}-rootless"
+    echo ""
+    echo "=========================================="
+    echo "Building rootless image..."
+    echo "=========================================="
+    echo ""
+    DOCKER_BUILDKIT=1 docker buildx build "${output[@]}" \
+        -t "${rootless_tag}" - <<EOF
+FROM ${DOCKER_IMAGE_TAG}
+USER root
+RUN groupadd --system --gid 10001 llama-swap && \\
+    useradd --system --uid 10001 --gid 10001 \\
+      --home /app --shell /sbin/nologin llama-swap && \\
+    chown -R 10001:10001 /etc/llama-swap /models
+USER 10001
+EOF
+    echo ""
+    echo "Rootless image built: ${rootless_tag}"
+}
+
 build_runtime() {
     local args=(
         --build-arg "BACKEND=${BACKEND}"
@@ -443,6 +472,24 @@ build_runtime() {
 }
 
 # ── --stage: build and publish one image ──────────────────────────────
+
+if [[ "$MODE" == "stage" && "$STAGE_TARGET" == "rootless" ]]; then
+    echo ""
+    echo "Image: ${DOCKER_IMAGE_TAG}-rootless"
+    echo ""
+    # No image_exists short-circuit here: the rootless tag is not
+    # content-addressed, so a tag left over from a previous run must not
+    # skip the rebuild of a moved root image.
+    if ! image_exists "${DOCKER_IMAGE_TAG}"; then
+        echo "ERROR: ${DOCKER_IMAGE_TAG} has not been published." >&2
+        echo "  Publish the unified image first; rootless is derived from it." >&2
+        exit 1
+    fi
+    build_rootless --load --push
+    echo ""
+    echo "Published: ${DOCKER_IMAGE_TAG}-rootless"
+    exit 0
+fi
 
 if [[ "$MODE" == "stage" ]]; then
     if [[ "$STAGE_TARGET" == "base" ]]; then
@@ -573,24 +620,18 @@ fi
 
 echo "audio.cpp verified: deployment build (compiled model spec catalog), binary runs"
 
-echo ""
-echo "=========================================="
-echo "Building rootless image..."
-echo "=========================================="
-echo ""
-
-ROOTLESS_TAG="${DOCKER_IMAGE_TAG}-rootless"
-docker buildx build --load -t "${ROOTLESS_TAG}" - <<EOF
-FROM ${DOCKER_IMAGE_TAG}
-USER root
-RUN groupadd --system --gid 10001 llama-swap && \\
-    useradd --system --uid 10001 --gid 10001 \\
-      --home /app --shell /sbin/nologin llama-swap && \\
-    chown -R 10001:10001 /etc/llama-swap /models
-USER 10001
-EOF
-
-echo "Rootless image built: ${ROOTLESS_TAG}"
+if [[ "$MODE" == "assemble" ]]; then
+    # CI builds rootless from the published image via --stage=rootless, so
+    # the docker-container builder never has to pull a tag that does not
+    # exist yet.
+    echo ""
+    echo "Skipping rootless image: publish the unified image first, then run"
+    echo "  build-image.sh --${BACKEND} --stage=rootless"
+    ROOTLESS_BUILT=false
+else
+    build_rootless --load
+    ROOTLESS_BUILT=true
+fi
 
 echo ""
 echo "=========================================="
@@ -599,7 +640,9 @@ echo "=========================================="
 echo ""
 echo "Image tags:"
 echo "  ${DOCKER_IMAGE_TAG}"
-echo "  ${ROOTLESS_TAG}"
+if [[ "$ROOTLESS_BUILT" == true ]]; then
+    echo "  ${DOCKER_IMAGE_TAG}-rootless"
+fi
 echo ""
 echo "Built with:"
 echo "  llama.cpp:            ${LLAMA_HASH}"

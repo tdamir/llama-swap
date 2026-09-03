@@ -192,7 +192,10 @@ jobs:
           chmod +x docker/unified/build-image.sh
           docker/unified/build-image.sh --${{ inputs.backend }} --assemble
 
-      - name: Push to GitHub Container Registry
+      # Rootless is built from the PUBLISHED unified image (FROM resolves
+      # against the registry, since the buildx daemon cannot see daemon-local
+      # images). Pushing the root first is what makes that tag resolvable.
+      - name: Push root image to GitHub Container Registry
         if: ${{ !env.ACT && inputs.push_to_ghcr }}
         run: |
           BASE_TAG="ghcr.io/mostlygeek/llama-swap:unified-${{ inputs.backend }}"
@@ -202,7 +205,22 @@ jobs:
           docker tag "${BASE_TAG}" "${BASE_TAG}-${DATE_TAG}"
           docker push "${BASE_TAG}-${DATE_TAG}"
 
-          ROOTLESS_TAG="${BASE_TAG}-rootless"
-          docker push "${ROOTLESS_TAG}"
+      - name: Build and push rootless image
+        if: ${{ !env.ACT && inputs.push_to_ghcr }}
+        env:
+          LLAMA_REF: ${{ inputs.llama_hash }}
+          WHISPER_REF: ${{ inputs.whisper_hash }}
+          SD_REF: ${{ inputs.sd_hash }}
+          AUDIO_REF: ${{ inputs.audio_hash }}
+          IK_LLAMA_REF: ${{ inputs.ik_llama_hash }}
+          LS_VERSION: ${{ inputs.ls_hash }}
+          DOCKER_IMAGE_TAG: ghcr.io/mostlygeek/llama-swap:unified-${{ inputs.backend }}
+          BUILDX_BUILDER: ${{ env.ACT == 'true' && 'llama-swap-builder' || '' }}
+        run: |
+          chmod +x docker/unified/build-image.sh
+          docker/unified/build-image.sh --${{ inputs.backend }} --stage=rootless
+
+          ROOTLESS_TAG="ghcr.io/mostlygeek/llama-swap:unified-${{ inputs.backend }}-rootless"
+          DATE_TAG=$(date -u +%Y-%m-%d)
           docker tag "${ROOTLESS_TAG}" "${ROOTLESS_TAG}-${DATE_TAG}"
           docker push "${ROOTLESS_TAG}-${DATE_TAG}"
